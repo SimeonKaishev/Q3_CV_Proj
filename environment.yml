@@ -1,0 +1,10 @@
+name: album-cover-generator
+dependencies:
+  - python=3.12.8
+  - numpy
+  - opencv
+  - pip:
+    - streamlit==1.40.0
+    - streamlit-drawable-canvas
+    - vedo
+
