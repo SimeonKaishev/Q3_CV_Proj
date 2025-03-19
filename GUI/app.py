@@ -1,7 +1,17 @@
+import sys
+import os
+import asyncio
 import streamlit as st
 import cv2
 import numpy as np
+import torch
 from PIL import Image
+from style_transfer.utils import load_image, select_style_images
+from style_transfer.model import StyleTransferModel
+
+# ✅ Fix for Windows event loop issue
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 # Title of the app
 st.title("Album Art Generator")
@@ -13,8 +23,10 @@ lyrics = st.text_area("Lyrics (Optional)")
 instructions = st.text_area("Instructions (Optional)")
 
 # Store images in session state
-if 'image' not in st.session_state:
-    st.session_state['image'] = None
+if "image" not in st.session_state:
+    st.session_state["image"] = None
+if "stylized_images" not in st.session_state:
+    st.session_state["stylized_images"] = []
 
 if artist_name and album_name:
     # Step 2: Allow user to either generate an image or upload one
@@ -24,18 +36,10 @@ if artist_name and album_name:
     )
 
     if image_choice == "Generate an image":
-
-        #--------------TODO-----------------
-        # Here is where we would call the functions that will use the fine-tuned sd model to generate several possible options for the user 
-        #to choose from.
-        #For now i just paste some text to make the image
-
-        # Logic for generating an image
         if st.button("Generate Image"):
             st.write(f"Generating an image for artist: {artist_name}, album: {album_name}")
 
-            # Placeholder for the image generation process
-            # For now, creating a blank image with the artist and album name on it
+            # Placeholder image (User would replace this with actual AI-generated image)
             generated_img = np.zeros((300, 300, 3), dtype=np.uint8)
             generated_img = cv2.putText(
                 generated_img,
@@ -48,50 +52,61 @@ if artist_name and album_name:
                 cv2.LINE_AA,
             )
 
-            # Save the generated image to session state
-            st.session_state['image'] = generated_img
-            st.image(st.session_state['image'], caption="Generated Image", use_container_width=True)
+            st.session_state["image"] = generated_img
+            st.image(st.session_state["image"], caption="Generated Image", use_container_width=True)
 
     elif image_choice == "Upload an image":
-        # Step 3: Allow user to upload an image
         uploaded_file = st.file_uploader("Upload an image", type=["jpg", "png", "jpeg"])
 
         if uploaded_file is not None:
             uploaded_image = Image.open(uploaded_file)
             uploaded_image = np.array(uploaded_image)
+            st.session_state["image"] = uploaded_image
+            st.image(st.session_state["image"], caption="Uploaded Image", use_container_width=True)
 
-            # Save the uploaded image to session state
-            st.session_state['image'] = uploaded_image
-            st.image(st.session_state['image'], caption="Uploaded Image", use_container_width=True)
+    # Step 3: Mood selection and stylization
+    if st.session_state["image"] is not None:
+        mood = st.selectbox("Select the mood for the album cover", ["Happy", "Sad", "Exciting", "Relaxed"])
 
-    # Step 3: Option to stylize the image
-    if st.session_state['image'] is not None:
-        stylize_choice = st.radio(
-            "Do you want to stylize the image?",
-            ("Yes", "No")
-        )
+        if st.button("Stylize Image"):
+            st.write(f"Applying {mood} style transfer...")
 
-        if stylize_choice == "Yes":
-        
-            #--------------TODO-----------------
-            # Here is where the mood input would come in and we would once again generate a few versions of the image for them to choose 
-            # based off of the mood. Probably 8 stylised and the original (or 2 or 5 idk depends how fucky we get with the style generatuion)
-            #for now just some chat gpt blur
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            content_img = load_image(st.session_state["image"]).to(device)
 
+            # Select 3 random style images based on mood
+            style_images = select_style_images(mood, num_styles=3)
 
-            # Placeholder for the stylization process
-            # Here, you could add actual code for image stylization (like applying a filter)
-            st.write("Stylizing the image...")
+            stylized_versions = []
+            for style_path in style_images:
+                style_img = load_image(style_path).to(device)
+                model = StyleTransferModel(content_img, style_img)
+                
+                # Generate 3 variations per style image
+                for _ in range(3):
+                    output_img = model.train(num_steps=30)
+                    output_img = output_img.squeeze().permute(1, 2, 0).cpu().detach().numpy()
+                    output_img = np.clip(output_img, 0, 1)  # ✅ Fix: Ensure values are in range [0,1]
+                    stylized_versions.append(output_img)
 
-            # Example: Apply a simple blur filter to simulate stylization
-            stylized_img = cv2.GaussianBlur(st.session_state['image'], (15, 15), 0)
+            # Save stylized images to session state
+            st.session_state["stylized_images"] = stylized_versions
 
-            st.image(stylized_img, caption="Stylized Image", use_container_width=True)
-        else:
-            st.write("No stylization applied. Here's the original image.")
-            st.image(st.session_state['image'], caption="Original Image", use_container_width=True)
+        # Display 3x3 grid of stylized images
+        if st.session_state["stylized_images"]:
+            st.write("### Select Your Favorite Style:")
+            cols = st.columns(3)
+            for i, img in enumerate(st.session_state["stylized_images"]):
+                img = np.clip(img, 0, 1)  # ✅ Fix: Ensure images are valid
+                with cols[i % 3]:  
+                    st.image(img, use_container_width=True, caption=f"Style Option {i+1}")
+                    if st.button(f"Select Style {i+1}", key=f"style_{i}"):
+                        st.session_state["final_choice"] = img
 
-    # ------------------TODO--------------------
-    #Add the text inserting bit here
+        # Show final selected image
+        if "final_choice" in st.session_state:
+            st.write("### Selected Final Cover")
+            st.image(st.session_state["final_choice"], caption="Final Album Cover", use_container_width=True)
+
 else:
     st.warning("Please enter both artist and album name to proceed.")
