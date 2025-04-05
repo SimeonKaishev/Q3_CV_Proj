@@ -80,6 +80,8 @@ if artist_name and album_name:
         steps = st.slider("Steps", 5, 50, 25)
         guidance = st.slider("Guidance Scale", 1.0, 20.0, 7.5)
 
+        grid_option = st.selectbox("How many images to generate?", [1, 3, 9])
+
         if st.button("🎨 Generate Image"):
             #st.write(f"Generating image for **{artist_name} – {album_name}**...")
 
@@ -90,15 +92,17 @@ if artist_name and album_name:
             if instructions:
                 prompt += f" Style notes: {instructions.strip()}"
 
-            # Placeholder for image generation
-            #model = StableDiffusionPhotoStyle()
-            #generated_image = model.generate(prompt, resolution=resolution)
-            with st.spinner("Generating..."):
-                image_np = generate_image(prompt, steps=steps, guidance=guidance)
+            stylized_versions = []
+            progress_bar = st.progress(0)
 
-            st.session_state["image"] = image_np
+            for i in range(grid_option):
+                with st.spinner(f"Generating image {i+1}/{grid_option}..."):
+                    img = generate_image(prompt, steps=steps, guidance=guidance)
+                    stylized_versions.append(img)
+                    progress_bar.progress((i + 1) / grid_option)
 
-            st.image(image_np, caption="Generated Album Cover", use_container_width=True)
+            st.session_state["stylized_images"] = stylized_versions
+            st.session_state["image"] = None  # Reset previous choice
 
     elif image_choice == "Upload an image":
         uploaded_file = st.file_uploader("Upload an image", type=["jpg", "png", "jpeg"])
