@@ -8,14 +8,38 @@ import torch
 from PIL import Image
 from style_transfer.utils import load_image, select_style_images
 from style_transfer.sd_style import StableDiffusionPhotoStyle
+# Get the absolute path of the Scripts directory
+script_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts"))
+
+# Add Scripts/ to the system path
+sys.path.append(script_dir)
+
+
+from sd_helper import load_model, generate_image
+##import scripts.sd_helper as ig
+import torch
+
+
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+# Load model once
+@st.cache_resource
+def initialize_model():
+    return load_model(
+        base_model="stabilityai/stable-diffusion-2-1",
+        lora_path="path/to/lora/dir",
+        weight_name="pytorch_lora_weights.safetensors"
+    )
 
 st.markdown(
     "<h1 style='text-align: center;'>🎨 Album Art Generator</h1>",
     unsafe_allow_html=True
 )
+
+model = initialize_model()
+
 # Centered intro message
 st.markdown(
     "<div style='text-align: center;'>"
@@ -53,8 +77,11 @@ if artist_name and album_name:
         instructions = st.text_area("📝 Additional Style Instructions (Optional)")
         resolution = st.selectbox("🖼️ Desired Resolution", ["512x512", "768x768", "1024x1024"])
 
+        steps = st.slider("Steps", 5, 50, 25)
+        guidance = st.slider("Guidance Scale", 1.0, 20.0, 7.5)
+
         if st.button("🎨 Generate Image"):
-            st.write(f"Generating image for **{artist_name} – {album_name}**...")
+            #st.write(f"Generating image for **{artist_name} – {album_name}**...")
 
             # Construct prompt from user input
             prompt = f"An album cover for a {genre} album titled '{album_name}' by {artist_name}."
@@ -64,11 +91,14 @@ if artist_name and album_name:
                 prompt += f" Style notes: {instructions.strip()}"
 
             # Placeholder for image generation
-            model = StableDiffusionPhotoStyle()
-            generated_image = model.generate(prompt, resolution=resolution)
+            #model = StableDiffusionPhotoStyle()
+            #generated_image = model.generate(prompt, resolution=resolution)
+            with st.spinner("Generating..."):
+                image_np = generate_image(prompt, steps=steps, guidance=guidance)
 
-            st.session_state["image"] = np.array(generated_image)
-            st.image(generated_image, caption="Generated Album Cover", use_container_width=True)
+            st.session_state["image"] = image_np
+
+            st.image(image_np, caption="Generated Album Cover", use_container_width=True)
 
     elif image_choice == "Upload an image":
         uploaded_file = st.file_uploader("Upload an image", type=["jpg", "png", "jpeg"])

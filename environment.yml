@@ -7,4 +7,11 @@ dependencies:
     - streamlit==1.40.0
     - streamlit-drawable-canvas
     - vedo
-
+    - torch
+    - torchvision
+    - diffusers
+    - pillow
+    - transformers
+    - accelerate
+    - sentencepiece
+    - peft
