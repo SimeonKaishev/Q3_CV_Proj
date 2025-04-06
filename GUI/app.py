@@ -4,6 +4,7 @@ import asyncio
 import streamlit as st
 import cv2
 import numpy as np
+
 import torch
 from PIL import Image
 from style_transfer.utils import load_image, select_style_images
@@ -16,6 +17,9 @@ sys.path.append(script_dir)
 
 
 from sd_helper import load_model, generate_image
+from title_placement import place_text_using_visual_balance
+
+
 ##import scripts.sd_helper as ig
 import torch
 
@@ -83,8 +87,6 @@ if artist_name and album_name:
         grid_option = st.selectbox("How many images to generate?", [1, 3, 9])
 
         if st.button("🎨 Generate Image"):
-            #st.write(f"Generating image for **{artist_name} – {album_name}**...")
-
             # Construct prompt from user input
             prompt = f"An album cover for a {genre} album titled '{album_name}' by {artist_name}."
             if lyrics:
@@ -104,6 +106,20 @@ if artist_name and album_name:
             st.session_state["stylized_images"] = stylized_versions
             st.session_state["image"] = None  # Reset previous choice
 
+        if st.session_state.get("stylized_images"):
+            st.markdown("### 🎯 Select One of the Generated Images")
+
+            cols = st.columns(3)
+            for idx, img in enumerate(st.session_state["stylized_images"]):
+                with cols[idx % 3]:
+                    st.image(img, use_container_width=True, caption=f"Option {idx + 1}")
+                    if st.button(f"✅ Select Option {idx + 1}", key=f"select_{idx}"):
+                        st.session_state["image"] = img
+                        st.success(f"Selected Option {idx + 1}")
+
+            # Display generated images in a grid
+            cols = st.columns(grid_option if grid_option <= 3 else 3)
+
     elif image_choice == "Upload an image":
         uploaded_file = st.file_uploader("Upload an image", type=["jpg", "png", "jpeg"])
         if uploaded_file:
@@ -116,5 +132,100 @@ if artist_name and album_name:
         st.write("### ✅ Final Album Cover")
         st.image(st.session_state["image"], caption="Selected Final Art", use_container_width=True)
 
+            # --- Title Placement on Selected Image ---
+        st.divider()
+        st.header("📝 Add Title to Album Cover")
+
+        # Font options (OpenCV fonts)
+        font_options = {
+            "Simplex": cv2.FONT_HERSHEY_SIMPLEX,
+            "Complex": cv2.FONT_HERSHEY_COMPLEX,
+            "Duplex": cv2.FONT_HERSHEY_DUPLEX,
+            "Triplex": cv2.FONT_HERSHEY_TRIPLEX,
+            "Simplex Script": cv2.FONT_HERSHEY_SCRIPT_SIMPLEX,
+            "Complex Script": cv2.FONT_HERSHEY_SCRIPT_COMPLEX,
+            "Plain": cv2.FONT_HERSHEY_PLAIN,
+        }
+
+        text_size_option = st.selectbox("Select Text Size", ["Big", "Medium", "Small"])
+        image_np = np.array(st.session_state["image"])
+        image_cv = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+        image_height, image_width, _ = image_cv.shape
+
+        if text_size_option == "Big":
+            text_size = int(image_width * 0.75), 60
+        elif text_size_option == "Medium":
+            text_size = int(image_width * 0.50), 60
+        else:
+            text_size = int(image_width * 0.25), 60
+
+        selected_font = st.selectbox("Select Font", list(font_options.keys()))
+        font = font_options[selected_font]
+        color_hex = st.color_picker("Pick Text Color", "#FFFFFF")
+        text_color = tuple(int(color_hex.lstrip("#")[i:i+2], 16) for i in (0, 2, 4))
+        thickness = st.slider("Text Thickness", min_value=1, max_value=10, value=2)
+
+        title_text = st.text_input("Title Text", value=f"{album_name} - {artist_name}")
+
+        if st.button("🧠 Place Title"):
+            position = place_text_using_visual_balance(image_cv, text_size=text_size, use_diagonal=True)
+            x, y = position if position else (100, 100)
+
+            st.session_state.title = title_text
+            st.session_state.font = font
+            st.session_state.text_size = text_size
+            st.session_state.font_color = text_color
+            st.session_state.font_thickness = thickness
+            st.session_state.font_name = selected_font
+            st.session_state.x = x
+            st.session_state.y = y
+            st.session_state.placed = True
+
+        if st.session_state.get("placed", False):
+            st.header("🎛️ Adjust Title Position")
+            x_offset = st.slider("X Offset", min_value=0, max_value=image_width, value=st.session_state.x)
+            y_offset = st.slider("Y Offset", min_value=0, max_value=image_height, value=st.session_state.y)
+
+            def calculate_font_scale(text, max_width, max_height, font, thickness):
+                font_scale = 1.0
+                (tw, th), _ = cv2.getTextSize(text, font, font_scale, thickness)
+                if tw < max_width:
+                    while tw < max_width and th < max_height:
+                        font_scale += 0.1
+                        (tw, th), _ = cv2.getTextSize(text, font, font_scale, thickness)
+                else:
+                    while tw > max_width:
+                        font_scale -= 0.1
+                        (tw, th), _ = cv2.getTextSize(text, font, font_scale, thickness)
+                return font_scale
+
+            font_scale = calculate_font_scale(
+                st.session_state.title,
+                st.session_state.text_size[0],
+                st.session_state.text_size[1],
+                font=st.session_state.font,
+                thickness=st.session_state.font_thickness
+            )
+
+            (text_w, text_h), _ = cv2.getTextSize(st.session_state.title, st.session_state.font, font_scale, st.session_state.font_thickness)
+            x_text = x_offset
+            y_text = y_offset + text_h
+
+            image_copy = image_cv.copy()
+            cv2.putText(
+                image_copy,
+                st.session_state.title,
+                (x_text, y_text),
+                st.session_state.font,
+                font_scale,
+                st.session_state.font_color[::-1],
+                st.session_state.font_thickness
+            )
+
+            image_final = cv2.cvtColor(image_copy, cv2.COLOR_BGR2RGB)
+            st.subheader("📸 Final Album Art with Title")
+            st.image(image_final, use_column_width=True)
+
 else:
     st.warning("⛔ Please enter both artist and album name to continue.")
+
