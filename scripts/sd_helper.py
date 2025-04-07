@@ -8,9 +8,7 @@ from PIL import Image
 pipeline = None
 
 
-def load_model(base_model="stable-diffusion-v1-5/stable-diffusion-v1-5",
-               lora_path="path/to/lora/model",
-               weight_name="pytorch_lora_weights.safetensors"):
+def load_model():
     """Loads the SD model with LoRA weights once."""
     global pipeline
     if pipeline is None:
