@@ -1,4 +1,17 @@
 # Album Art generation
+## Overview
+This project explores the use of fine-tuned generative diffusion models to create **custom AI-generated album cover art** conditioned on **musical metadata** such as artist name, album title, genre, mood, and optional lyrics. By leveraging **Stable Diffusion 1.5** and applying **LoRA (Low-Rank Adaptation)** for domain-specific fine-tuning, we developed a creative pipeline that produces stylistically coherent and emotionally resonant visuals tailored to the identity of a music album.
+
+Unlike general-purpose AI art tools, our system is designed specifically for the music industry, offering generation conditioned on structured inputs and incorporating intelligent **title placement** based on image saliency analysis. This makes the tool especially useful for musicians, designers, and developers looking to automate the creation of album visuals while preserving artistic alignment with the music’s tone and genre.
+
+Our contributions include:
+- A curated dataset of over 60,000 album covers across 10 genres: [link](https://huggingface.co/datasets/sskaishev/album-covers-3) 
+- A fine-tuned Stable Diffusion model optimized for album art aesthetics
+- A prompt-building interface that integrates metadata and lyrics
+- Saliency-aware title placement for improved readability and layout balance
+
+This project demonstrates how **domain-specific finetuning of generative models** can unlock practical, high-impact applications in music branding and digital design.
+
 ## Project Setup Instructions
 
 This guide will walk you through the steps to set up the environment, install dependencies, and run the Streamlit app for the CV project.
